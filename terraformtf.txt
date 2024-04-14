@@ -1,0 +1,167 @@
+Last login: Sun Apr 14 14:22:54 on ttys000
+adithyaambati@Adithyas-MacBook-Air ~ % vim main.tf
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+adithyaambati@Adithyas-MacBook-Air ~ % vim providers.tf
+adithyaambati@Adithyas-MacBook-Air ~ % vim main.tf
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Define the VPC
+resource "aws_vpc" "myvpc" {
+  cidr_block = "10.0.0.0/16"
+}
+
+# Create an internet gateway
+resource "aws_internet_gateway" "igw" {
+  vpc_id = aws_vpc.myvpc.id
+}
+
+# Define public and private subnets
+resource "aws_subnet" "public_subnet" {
+  vpc_id     = aws_vpc.myvpc.id
+  cidr_block = "10.0.1.0/24"
+}
+
+resource "aws_subnet" "private_subnet" {
+  vpc_id     = aws_vpc.myvpc.id
+  cidr_block = "10.0.2.0/24"
+}
+
+# Bastion host security group
+resource "aws_security_group" "bastion_sg" {
+  name        = "bastion_sg"
+  description = "Security group for bastion host"
+
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+# Apache server security group
+resource "aws_security_group" "apache_sg" {
+  name        = "apache_sg"
+  description = "Security group for Apache server"
+
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+# EC2 instance for the bastion host
+resource "aws_instance" "bastion_host" {
+  ami                    = "your_ami_id"
+  instance_type          = "t2.micro"
+  subnet_id              = aws_subnet.public_subnet.id
+  security_groups        = [aws_security_group.bastion_sg.name]
+  associate_public_ip    = true
+  key_name               = "your_key_name"
+}
+
+# EC2 instance for the Apache server
+resource "aws_instance" "apache_server" {
+  ami                    = "your_ami_id"
+  instance_type          = "t2.micro"
+  subnet_id              = aws_subnet.private_subnet.id
+  security_groups        = [aws_security_group.apache_sg.name]
+  key_name               = "your_key_name"
+ # User data script to install and configure Apache
+  user_data = <<-EOF
+              #!/bin/bash
+              yum update -y
+              yum install -y httpd
+              systemctl start httpd
+              systemctl enable httpd
+              EOF
+}
+
+# Route table for public subnet
+resource "aws_route_table" "public_rt" {
+  vpc_id = aws_vpc.myvpc.id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.igw.id
+  }
+}
+
+# Route table association for public subnet
+resource "aws_route_table_association" "public_rt_association" {
+  count          = length(aws_subnet.public_subnet)
+  subnet_id      = aws_subnet.public_subnet.*.id[count.index]
+  route_table_id = aws_route_table.public_rt.id
+}
